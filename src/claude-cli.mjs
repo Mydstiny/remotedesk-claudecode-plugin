@@ -5,6 +5,19 @@ const execFileAsync = promisify(execFile);
 export const SUPPORTED_VERSION = "2.1.286";
 export const REQUIRED_FLAGS = ["--print", "--input-format", "--output-format", "--permission-mode"];
 
+function usesWindowsScriptShim(executable) {
+  return process.platform === "win32" && /\.(?:cmd|bat)$/i.test(String(executable));
+}
+
+function commandOptions(executable, extra = {}) {
+  return {
+    ...extra,
+    // npm-installed Windows CLIs are commonly .cmd shims. Node only runs
+    // those through cmd.exe, while native binaries continue to use execFile.
+    shell: usesWindowsScriptShim(executable),
+  };
+}
+
 export function parseVersion(text) {
   const match = /(?:^|\s)(\d+\.\d+\.\d+)(?:\s|$)/.exec(String(text));
   return match?.[1] ?? "";
@@ -12,9 +25,9 @@ export function parseVersion(text) {
 
 export async function inspectClaude(executable = "claude") {
   try {
-    const versionResult = await execFileAsync(executable, ["--version"], { timeout: 5000, windowsHide: true });
+    const versionResult = await execFileAsync(executable, ["--version"], commandOptions(executable, { timeout: 5000, windowsHide: true }));
     const version = parseVersion(versionResult.stdout + "\n" + versionResult.stderr);
-    const helpResult = await execFileAsync(executable, ["--help"], { timeout: 5000, windowsHide: true });
+    const helpResult = await execFileAsync(executable, ["--help"], commandOptions(executable, { timeout: 5000, windowsHide: true }));
     const help = helpResult.stdout + "\n" + helpResult.stderr;
     const missing = REQUIRED_FLAGS.filter((flag) => !help.includes(flag));
     return {
@@ -57,6 +70,7 @@ export function spawnPrint(executable, prompt, options = {}) {
     env: options.env ?? process.env,
     stdio: ["ignore", "pipe", "pipe"],
     windowsHide: true,
+    shell: usesWindowsScriptShim(executable),
   });
   return child;
 }
