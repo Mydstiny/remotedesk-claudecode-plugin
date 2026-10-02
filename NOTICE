@@ -1,0 +1,7 @@
+RemoteDesk Claude Code Plugin 0.2.0
+Original integration and bridge code: Copyright 2026 Mydstiny, MIT.
+Claude Code is an externally installed Anthropic product and is not redistributed.
+The pinned Claude Agent SDK dependency is distributed under its package license;
+see package-lock.json and node_modules/@anthropic-ai/claude-agent-sdk/LICENSE.md
+when installing dependencies.
+See docs/provenance.md for the exact compatibility boundary.
