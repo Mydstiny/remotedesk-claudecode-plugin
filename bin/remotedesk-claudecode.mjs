@@ -1,18 +1,43 @@
 #!/usr/bin/env node
-import { inspectClaude } from "../src/claude-cli.mjs";
+import { fileURLToPath } from "node:url";
+import { join } from "node:path";
+import { main } from "../packages/bridge-core/lib/cli.mjs";
+import { Bridge } from "../packages/bridge-core/lib/server.mjs";
+import { doctor } from "../src/doctor.mjs";
+import { ClaudeAdapter } from "../src/claude-adapter.mjs";
+import { runControlPanel } from "../src/control-panel.mjs";
 
-const command = process.argv[2] ?? "help";
-if (command === "help") {
-  console.log("remotedesk-claudecode doctor --json | probe --json");
-  process.exit(0);
-}
-if (command !== "doctor" && command !== "probe") {
-  console.error("UNKNOWN_COMMAND");
-  process.exit(2);
-}
-const result = await inspectClaude(process.env.REMOTEDESK_CLAUDE_EXECUTABLE ?? "claude");
-const output = command === "doctor"
-  ? { ...result, ready: result.supported }
-  : { ...result, ready: false, reason: "UNVERIFIED_CLAUDE_PROTOCOL" };
-console.log(JSON.stringify(output));
-process.exit(command === "doctor" && !result.supported ? 2 : 0);
+const entry = fileURLToPath(import.meta.url);
+await main({
+  engine: "claudecode",
+  defaultPort: 9445,
+  entry,
+  doctor,
+  serve: async (directory) => {
+    const adapter = new ClaudeAdapter({
+      env: {
+        ...process.env,
+        CLAUDE_CONFIG_DIR: process.env.CLAUDE_CONFIG_DIR || join(directory, "claude-home"),
+      },
+    });
+    const bridge = new Bridge(directory, adapter);
+    let stopping;
+    const stop = () => (stopping ??= (async () => {
+      try { await bridge.stop(); } catch { process.exitCode = 2; }
+    })());
+    process.once("SIGINT", stop);
+    process.once("SIGTERM", stop);
+    try {
+      await bridge.start();
+      console.log(JSON.stringify({ ready: true, engine: "claudecode", protocol: 1 }));
+    } catch (error) {
+      await stop();
+      throw error;
+    }
+  },
+  extra: async (command, state, _config, options) => {
+    if (command !== "panel") return false;
+    await runControlPanel(state, { engine: "claudecode", port: options.port === undefined ? undefined : Number(options.port) });
+    return true;
+  },
+});

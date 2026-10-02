@@ -1,19 +1,14 @@
-import { inspectClaude } from "./claude-cli.mjs";
+export { ClaudeAdapter } from "./claude-adapter.mjs";
 
+// App/client exposure remains gated until the pinned CLI/SDK contract has been
+// accepted with a real account, approval round-trip, restart and device matrix.
 export const capabilities = Object.freeze({
   verified: false,
-  reason: "UNVERIFIED_CLAUDE_PROTOCOL",
-  sessions: false,
-  approvals: false,
-  attachments: false,
+  reason: "CLAUDE_PROTOCOL_ACCEPTANCE_REQUIRED",
+  sessions: true,
+  approvals: true,
+  questions: true,
+  attachments: ["text/plain", "image/png", "image/jpeg"],
   background: false,
-  cancellation: false,
+  cancellation: true,
 });
-
-export class ClaudeAdapter {
-  constructor({ executable = "claude" } = {}) { this.executable = executable; }
-  async doctor() { return inspectClaude(this.executable); }
-  async start() { throw new Error("UNVERIFIED_CLAUDE_PROTOCOL"); }
-  async write() { throw new Error("UNVERIFIED_CLAUDE_PROTOCOL"); }
-  async read() { throw new Error("UNVERIFIED_CLAUDE_PROTOCOL"); }
-}
