@@ -8,9 +8,12 @@ import { ClaudeAdapter } from "../src/claude-adapter.mjs";
 
 test("probe accepts only the pinned Claude CLI contract", async () => {
   const root = await mkdtemp(join(tmpdir(), "remotedesk-claude-probe-"));
-  const fake = join(root, "claude");
-  await writeFile(fake, "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then echo '" + SUPPORTED_VERSION + "'; exit 0; fi\nprintf '%s\\n' '--print --input-format --output-format --permission-mode'\n");
-  await chmod(fake, 0o700);
+  const fake = join(root, process.platform === "win32" ? "claude.cmd" : "claude");
+  const script = process.platform === "win32"
+    ? "@echo off\r\nif \"%1\" == \"--version\" (echo " + SUPPORTED_VERSION + " & exit /b 0)\r\necho --print --input-format --output-format --permission-mode\r\n"
+    : "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then echo '" + SUPPORTED_VERSION + "'; exit 0; fi\nprintf '%s\\n' '--print --input-format --output-format --permission-mode'\n";
+  await writeFile(fake, script);
+  if (process.platform !== "win32") await chmod(fake, 0o700);
   try {
     const result = await inspectClaude(fake);
     assert.equal(result.supported, true);
