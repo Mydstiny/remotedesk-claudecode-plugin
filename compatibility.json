@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "adapterVersion": "0.1.0",
+  "stage": "cli-probe-only",
+  "claudeCodeVersions": ["2.1.286"],
+  "testedNode": "26.4.0",
+  "testedPlatform": "darwin-arm64",
+  "remoteAccess": false,
+  "protocolMajor": 1,
+  "wireProtocolFrozen": false,
+  "parityStatus": "UNVERIFIED_CLAUDE_PROTOCOL",
+  "entitlement": "pro.lifetime",
+  "platforms": ["darwin", "linux", "win32"]
+}

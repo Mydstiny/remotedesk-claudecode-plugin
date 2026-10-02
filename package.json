@@ -1,0 +1,12 @@
+{
+  "name": "@remotedesk/claudecode-plugin",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "engines": { "node": ">=22.16.0" },
+  "bin": { "remotedesk-claudecode": "bin/remotedesk-claudecode.mjs" },
+  "scripts": { "test": "node --test test/*.test.mjs" },
+  "files": ["bin", "src", "docs", "compatibility.json", "README.md", "README.en.md", "LICENSE", "NOTICE", "SECURITY.md", "AGENTS.md", "test"],
+  "dependencies": {}
+}
