@@ -1,5 +1,8 @@
 import { readFile } from "node:fs/promises";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import { inspectClaude } from "./claude-cli.mjs";
+import { apiKeyStatus } from "./api-key.mjs";
 
 const SDK_VERSION = "0.3.286";
 
@@ -12,7 +15,7 @@ export async function doctor({ probe = false } = {}) {
     checks: [],
     actions: [],
     requiresUserAction: [],
-    warnings: ["CLAUDE_AUTHENTICATION_STAYS_ON_HOST", "REAL_TURN_AND_DEVICE_ACCEPTANCE_REQUIRED"],
+    warnings: ["ANTHROPIC_API_KEY_AUTH_ONLY", "REAL_TURN_AND_DEVICE_ACCEPTANCE_REQUIRED"],
     capabilities: { remoteAccess: true, remoteProtocol: 1, proEntitlement: "pro.lifetime", appExposure: false },
   };
   const check = (id, status, code) => report.checks.push({ id, status, code });
@@ -26,6 +29,12 @@ export async function doctor({ probe = false } = {}) {
     report.componentVersions.agentSdk = sdkPackage.version;
     if (sdkPackage.version !== SDK_VERSION) throw new Error("CLAUDE_SDK_VERSION_UNVERIFIED");
     check("agentSdk", "pass", "PINNED_AGENT_SDK");
+    const credential = await apiKeyStatus(join(homedir(), ".remotedesk", "claudecode"));
+    if (credential.configured) check("apiKey", "pass", "ANTHROPIC_API_KEY_CONFIGURED");
+    else {
+      check("apiKey", "warn", "ANTHROPIC_API_KEY_MISSING");
+      report.requiresUserAction.push("CONFIGURE_ANTHROPIC_API_KEY");
+    }
     if (probe) {
       check("streamContract", "pass", "SDK_QUERY_AND_CONTROL_SURFACES_PRESENT");
       report.warnings.push("NO_MODEL_TURN_OR_ACCOUNT_ACCESS_PERFORMED", "APP_EXPOSURE_REMAINS_GATED");

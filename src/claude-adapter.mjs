@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { readFile } from "node:fs/promises";
 import * as ClaudeSdk from "@anthropic-ai/claude-agent-sdk";
 import { inspectClaude } from "./claude-cli.mjs";
+import { API_KEY_SOURCES, apiKeyEnvironment, readApiKey } from "./api-key.mjs";
 import { Fault, requireThat, string } from "../packages/bridge-core/lib/errors.mjs";
 
 const exec = promisify(execFile);
@@ -92,10 +93,11 @@ export class ClaudeAdapter {
     processScope: "claude-agent-sdk-query",
   };
 
-  constructor({ command, sdk = ClaudeSdk, env } = {}) {
+  constructor({ command, sdk = ClaudeSdk, env, state } = {}) {
     this.command = command ?? process.env.REMOTEDESK_CLAUDE_EXECUTABLE ?? "claude";
     this.sdk = sdk;
     this.env = env ?? { ...process.env };
+    this.state = state;
     this.handles = new Map();
     this.runs = new Map();
     this.history = new Map();
@@ -139,7 +141,7 @@ export class ClaudeAdapter {
     return session.permissionMode === "read-only" || session.permissionMode === "plan" ? "plan" : "default";
   }
 
-  options(session, project, queue) {
+  options(session, project, queue, apiKey) {
     const options = {
       cwd: project.path,
       pathToClaudeCodeExecutable: this.command,
@@ -157,10 +159,7 @@ export class ClaudeAdapter {
         snapshot: true,
         append: "This is a RemoteDesk session for the explicitly authorized project. Keep all work inside the project directory. RemoteDesk forwards tool approvals and questions to the paired client. Do not claim that cancelled work stopped detached processes. MCP servers, extensions and delegation are unavailable.",
       },
-      env: {
-        ...this.env,
-        CLAUDE_AGENT_SDK_CLIENT_APP: "remotedesk-claudecode/0.2.0",
-      },
+      env: apiKeyEnvironment({ ...this.env, CLAUDE_AGENT_SDK_CLIENT_APP: "remotedesk-claude-agent/0.2.0" }, apiKey),
       canUseTool: (toolName, input, request) => this.canUseTool(session, toolName, input, request),
       onUserDialog: (request, options_) => this.onUserDialog(session, request, options_),
     };
@@ -175,13 +174,18 @@ export class ClaudeAdapter {
     if (this.closed) throw new Fault("ADAPTER_DISPOSED");
     if (this.handles.has(session.id)) return this.handles.get(session.id);
     authorize();
+    const credential = await readApiKey(this.state, this.env);
+    requireThat(credential.key !== "", "CLAUDE_API_KEY_REQUIRED");
+    if (this.handles.has(session.id)) return this.handles.get(session.id);
     const queue = new AsyncQueue();
-    const query = this.sdk.query({ prompt: queue, options: this.options(session, project, queue) });
+    const query = this.sdk.query({ prompt: queue, options: this.options(session, project, queue, credential.key) });
     const handle = { session, project, queue, query, history: this.history.get(session.id) ?? [], sequence: 0, initialized: false, consume: null };
     this.handles.set(session.id, handle);
     handle.consume = this.consume(handle);
     try {
       const initialization = await query.initializationResult();
+      const source = initialization.account?.apiKeySource;
+      if (source !== undefined && !API_KEY_SOURCES.has(source)) throw new Fault("CLAUDE_API_KEY_REQUIRED");
       const upstream = initialization.session_id;
       session.upstream ??= upstream;
       session.model ??= initialization.model;
@@ -193,7 +197,7 @@ export class ClaudeAdapter {
       return handle;
     } catch (error) {
       await this.closeHandle(session.id);
-      throw new Fault("CLAUDE_INITIALIZATION_FAILED");
+      throw new Fault(error?.code === "CLAUDE_API_KEY_REQUIRED" ? error.code : "CLAUDE_INITIALIZATION_FAILED");
     }
   }
 
@@ -230,6 +234,13 @@ export class ClaudeAdapter {
     const turn = message.user_message_uuid || message.user_message_uuids?.at(-1) || this.runs.get(handle.session.id)?.turnId;
     if (message.type === "system") {
       if (message.subtype === "init") {
+        if (!API_KEY_SOURCES.has(message.apiKeySource)) {
+          // Older CLIs may leave the account fields of the initialize reply empty; the init message always names
+          // the credential. Anything but an API key ends the session before it can continue.
+          this.emit(handle, "error", { code: "CLAUDE_API_KEY_REQUIRED" }, turn);
+          void this.closeHandle(handle.session.id);
+          return;
+        }
         handle.session.model ??= message.model;
         this.emit(handle, "session/ready", { model: message.model, cwd: message.cwd, tools: message.tools ?? [] }, turn);
       } else if (message.subtype === "status" || message.subtype === "session_state_changed") {
