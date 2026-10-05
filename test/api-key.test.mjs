@@ -33,7 +33,8 @@ test("the API key is read from the environment first, then the private state fil
     assert.deepEqual(await readApiKey(state, {}), { key: "", source: "none" });
     await saveApiKey(state, "  " + KEY + "\n");
     assert.deepEqual(await readApiKey(state, {}), { key: KEY, source: "file" });
-    assert.equal((await stat(join(state, API_KEY_FILE))).mode & 0o777, 0o600);
+    // Windows has no POSIX mode bits; there the private state directory ACL protects the file.
+    if (process.platform !== "win32") assert.equal((await stat(join(state, API_KEY_FILE))).mode & 0o777, 0o600);
     const other = "sk-ant-api03-" + "B".repeat(40);
     assert.deepEqual(await readApiKey(state, { ANTHROPIC_API_KEY: other }), { key: other, source: "environment" });
     assert.deepEqual(await apiKeyStatus(state, {}),
