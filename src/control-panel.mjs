@@ -7,6 +7,7 @@ import { Store } from "../packages/bridge-core/lib/store.mjs";
 import { privateDirectory } from "../packages/bridge-core/lib/privacy.mjs";
 import { invitePairingLink, inviteQrDataUrl, inviteQrSvg } from "./qr-code.mjs";
 import { controlPanelPage } from "./control-panel-page.mjs";
+import { apiKeyStatus, clearApiKey, saveApiKey } from "./api-key.mjs";
 
 const MAX_BODY = 100 * 1024;
 const DEFAULT_PORTS = { codex: 9543, dsh: 9544, claudecode: 9545 };
@@ -129,6 +130,7 @@ async function snapshot(state, engine, panelPort) {
     devices,
     sessions: current.sessions,
     operations: current.operations,
+    ...(engine === "claudecode" ? { credential: await apiKeyStatus(state) } : {}),
   };
 }
 
@@ -191,6 +193,17 @@ export async function startControlPanel(state, { engine, port } = {}) {
           qrSvg: inviteQrSvg(created),
           pairingLink: invitePairingLink(created, config, engine),
         });
+        return;
+      }
+      if (req.method === "POST" && engine === "claudecode" && url.pathname === "/api/credential") {
+        const input = await body(req);
+        await saveApiKey(state, input.apiKey);
+        json(res, 200, { credential: await apiKeyStatus(state) });
+        return;
+      }
+      if (req.method === "POST" && engine === "claudecode" && url.pathname === "/api/credential/clear") {
+        await clearApiKey(state);
+        json(res, 200, { credential: await apiKeyStatus(state) });
         return;
       }
       if (req.method === "POST" && url.pathname === "/api/revoke") {

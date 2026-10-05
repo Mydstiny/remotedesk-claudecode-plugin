@@ -27,7 +27,8 @@ revoke: --device <device id>; recover: only after this bridge process is stopped
 recover --action inspect: list uncertain native activity and its acknowledgement digest
 recover --confirm-native-cleanup <digest>: confirm you stopped all listed native work on the host
 service: --action render|install|start|stop|status|uninstall [--out <definition file>]
-panel: [--port <loopback port>] (default 9543 for Codex, 9544 for DSH, 9545 for Claude Code)
+panel: [--port <loopback port>] (default 9543 for Codex, 9544 for DSH, 9545 for Claude Agent)
+api-key: --action set|status|clear (Claude Agent; set reads the Anthropic API key from stdin)
 pair: --client <new private directory> --url <https endpoint> --invite <file> [--servername <cert hostname>]
 read/write: --client <directory> --method <protocol method> --params <JSON file>
 retry: --client <directory> --operation <original operation id>
