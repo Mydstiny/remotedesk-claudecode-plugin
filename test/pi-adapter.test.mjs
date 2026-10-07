@@ -220,7 +220,8 @@ test("conversations Pi or pi-gui holds are listed per project, with the app's wo
     assert.deepEqual(rows.map((row) => [row.upstream, row.title]), [["b", "第一行"], ["a", "修复登录"]]);
     assert.equal(rows[0].updatedAt, 3000);
     const projects = await adapter.nativeProjects();
-    assert.deepEqual(projects.map((row) => [row.key, row.title]), [["pi:/work/gui", "Gui 工作区"], ["pi:/work/p", "p"], ["pi:/work/other", "other"]]);
+    // /work/p is the configured project "p": it is not offered again as an app project.
+    assert.deepEqual(projects.map((row) => [row.key, row.title]), [["pi:/work/gui", "Gui 工作区"], ["pi:/work/other", "other"]]);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

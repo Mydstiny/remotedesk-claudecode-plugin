@@ -277,12 +277,16 @@ export class Bridge {
     process.stderr.write(JSON.stringify({ nativeImport: project.id, found: rows.length }) + "\n");
     const projectIds = new Set(this.config.projects.map((p) => p.id));
     // A conversation imported under a project that is gone (or a manual project the app now covers) moves here.
-    const known = new Map(
-      this.store
-        .all("session")
-        .filter((s) => s.upstream && (s.project === project.id || (s.nativeImported && !projectIds.has(s.project))))
-        .map((s) => [s.upstream, s]),
-    );
+    // One session per native conversation: one the bridge created (or one already here) wins over an orphaned
+    // import of the same conversation, which is left where it is instead of joining it as a duplicate.
+    const known = new Map();
+    for (const s of this.store
+      .all("session")
+      .filter((s) => s.upstream && (s.project === project.id || (s.nativeImported && !projectIds.has(s.project))))) {
+      const prior = known.get(s.upstream);
+      if (!prior || (prior.nativeImported && !s.nativeImported) || (prior.project !== project.id && s.project === project.id))
+        known.set(s.upstream, s);
+    }
     for (const row of rows.slice(0, NATIVE_IMPORT_LIMIT)) {
       if (typeof row?.upstream !== "string" || !row.upstream) continue;
       const title = String(row.title || "未命名会话").slice(0, 200);

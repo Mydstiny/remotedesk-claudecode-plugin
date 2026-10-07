@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
-import { readFile, stat } from "node:fs/promises";
+import { readFile, realpath, stat } from "node:fs/promises";
 import { homedir, hostname, platform } from "node:os";
 import { basename, join } from "node:path";
 import { promisify } from "node:util";
@@ -637,9 +637,15 @@ export class PiAdapter {
     return rows.sort((a, b) => b.updatedAt - a.updatedAt).slice(0, limit);
   }
 
-  /** The pi-gui app's workspaces, then every other folder Pi has conversations in. */
+  /**
+   * The pi-gui app's workspaces, then every other folder Pi has conversations in; a folder that is already a
+   * configured project is left to it (listed twice, its conversations would be too).
+   */
   async nativeProjects() {
     await this.prepare();
+    const real = async (path) => realpath(path).catch(() => path);
+    const configured = new Set(await Promise.all((this.core?.projects ?? []).filter((project) => !project.app)
+      .flatMap((project) => project.roots ?? [project.path]).map(real)));
     const byPath = new Map();
     try {
       const catalog = JSON.parse(await readFile(join(appDataDirectory(this.env), "catalogs.json"), "utf8"));
@@ -650,7 +656,11 @@ export class PiAdapter {
     for (const info of await this.sdk.SessionManager.listAll()) {
       if (info.cwd && info.messageCount && !byPath.has(info.cwd)) byPath.set(info.cwd, basename(info.cwd));
     }
-    return [...byPath].map(([path, title]) => ({ key: "pi:" + path, title, roots: [path] }));
+    const rows = [];
+    for (const [path, title] of byPath) {
+      if (!configured.has(await real(path))) rows.push({ key: "pi:" + path, title, roots: [path] });
+    }
+    return rows;
   }
 
   async diff(session) {
