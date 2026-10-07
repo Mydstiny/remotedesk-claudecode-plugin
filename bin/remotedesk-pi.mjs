@@ -17,7 +17,12 @@ await main({
     const bridge = new Bridge(directory, adapter);
     let stopping;
     const stop = () => (stopping ??= (async () => {
-      try { await bridge.stop(); } catch { process.exitCode = 2; }
+      try {
+        await bridge.stop();
+      } catch (error) {
+        console.error(JSON.stringify({ error: "ENGINE_CLEANUP_UNCONFIRMED", detail: String(error?.code ?? error?.message ?? error).slice(0, 200) }));
+        process.exitCode = 2;
+      }
     })());
     process.once("SIGINT", stop);
     process.once("SIGTERM", stop);
