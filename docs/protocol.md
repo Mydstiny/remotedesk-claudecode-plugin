@@ -54,7 +54,8 @@ Pi 插件实现 RemoteDesk 主机桥协议 1（与 Codex、DSH 插件相同的 `
 - **App 项目**（`nativeProjects`）：
   - 来源有两个：pi-gui 的工作区（`catalogs.json`），以及所有有过 Pi 对话的文件夹；
   - 项目 key 为 `pi:<路径>`。
-- **与电脑同时使用**：如果另一个 Pi 界面（pi-gui、终端）对该对话文件持有活跃租约（`<file>.lease` 指向本机仍在运行的进程），发送、压缩、重命名都会返回 `PI_SESSION_OPEN_IN_APP`；查看不受影响。
+- **与电脑同时使用**：如果另一个 Pi 界面（pi-gui、终端）对该对话文件持有活跃租约（`<file>.lease` 指向本机仍在运行的进程），发送、压缩、重命名都会返回 `PI_SESSION_OPEN_IN_APP`；查看不受影响。pi-gui 会对它打开过的每个对话一直持有租约，直到在 pi-gui 里关闭该对话或退出 pi-gui。`session.read` 的首页在 `nativeState.openIn.surface` 中提前标明持有方；手机可以用 `session.fork` 把整段对话复制成一个新的 Pi 对话（Pi 自己的 fork，新文件的头部记录原对话）继续。对话空闲时若被电脑端改写，插件会重新读取文件，不会在旧副本上继续。
+- **控制租约**：租约 90 秒内需要续期。同一台设备在租约过期后重新取得控制时沿用原令牌，未答复的审批仍然有效；只有释放控制、其他设备取得控制或审批自身 5 分钟到期时才会作废。
 
 ## `session.read` 快照
 

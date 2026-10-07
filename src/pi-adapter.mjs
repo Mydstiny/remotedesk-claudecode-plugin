@@ -94,7 +94,7 @@ export class PiAdapter {
     files: "pi-native-tools",
     models: true,
     rename: true,
-    fork: false,
+    fork: true,
     compact: true,
     terminalManagement: false,
     attachments: ["text/plain", "image/png", "image/jpeg"],
@@ -263,7 +263,32 @@ export class PiAdapter {
       nativePhase: "ready",
     });
     this.stored.delete(session.id);
+    await this.noteFile(handle);
     return handle;
+  }
+
+  /** The size of a session file (-1 while it does not exist yet). */
+  async fileSize(file) {
+    try { return (await stat(file)).size; } catch { return -1; }
+  }
+
+  /** Remembers the file as this handle last left it, so a change made elsewhere can be told from our own. */
+  async noteFile(handle) {
+    const file = handle.agent?.sessionFile;
+    handle.knownSize = file ? await this.fileSize(file) : -1;
+  }
+
+  /**
+   * An idle conversation the terminal or pi-gui has written to since it was opened here is opened again: a reply
+   * read or a turn started from the stale copy would miss what was added, and Pi would branch off an old message.
+   */
+  async refreshIfChanged(session) {
+    const handle = this.handles.get(session.id);
+    if (!handle || handle.run) return;
+    try { await handle.ready; } catch { return; }
+    const file = handle.agent?.sessionFile;
+    if (!file || handle.knownSize === undefined || handle.run) return;
+    if ((await this.fileSize(file)) !== handle.knownSize) await this.closeHandle(session.id);
   }
 
   /** The approval gate: an inline Pi extension that sees every tool call before it runs. */
@@ -400,6 +425,7 @@ export class PiAdapter {
     this.emit(handle, "turn/end", { status, result: status === "failed" ? run.error : "" }, run.turnId);
     run.finished = true;
     if (handle.run === run) handle.run = null;
+    void this.noteFile(handle);
     this.core.storage.delete("nativeActivity", handle.session.id);
     // execution.idle releases the project lock in the bridge, whatever the outcome; turn/end carries the status.
     this.emit(handle, "execution.idle", { status }, run.turnId);
@@ -422,10 +448,12 @@ export class PiAdapter {
   }
 
   async start(session, text, attachments = [], settings = {}, authorize = () => {}) {
-    if (Object.keys(settings).length) await this.update(session, settings, authorize);
+    await this.refreshIfChanged(session);
     const handle = await this.open(session, this.project(session), authorize);
     authorize();
+    // Checked before the settings: a model or title change is a write too.
     await this.assertWritable(handle);
+    if (Object.keys(settings).length) await this.update(session, settings, authorize);
     const run = this.newRun(handle, authorize);
     const input = composeInput(text, attachments);
     handle.agent
@@ -479,6 +507,7 @@ export class PiAdapter {
       }
       session.model = modelKey(handle.agent.model) ?? session.model;
       session.reasoningEffort = handle.agent.thinkingLevel;
+      await this.noteFile(handle);
     } else {
       Object.assign(session, rest);
       if (title !== undefined && session.upstream) {
@@ -546,6 +575,7 @@ export class PiAdapter {
   async read(session, { cursor } = {}) {
     const start = cursor === undefined || cursor === "" ? 0 : Number(cursor);
     requireThat(Number.isSafeInteger(start) && start >= 0, "CURSOR_INVALID");
+    if (start === 0) await this.refreshIfChanged(session);
     const handle = this.handles.get(session.id);
     let events;
     let usage = null;
@@ -575,6 +605,15 @@ export class PiAdapter {
     }
     meta.permissionMode ??= "read-only";
     const page = events.slice(start, start + PAGE);
+    // Another Pi surface holding the file (pi-gui keeps every conversation it has open): the phone can read it and go
+    // on in a copy (session.fork), and says so before a send is refused.
+    const nativeState = usage || window ? { tokenUsage: tokenUsageEvent(usage ?? {}, window) } : {};
+    if (start === 0) {
+      await this.prepare();
+      const file = handle?.agent?.sessionFile ?? this.sessionFile(session, this.cwd(session));
+      const holder = file ? await foreignLease(file) : null;
+      if (holder) nativeState.openIn = { surface: typeof holder.surface === "string" ? holder.surface.slice(0, 40) : "pi" };
+    }
     return {
       ...meta,
       status: handle?.run ? "running" : "idle",
@@ -582,8 +621,8 @@ export class PiAdapter {
       nextCursor: start + PAGE < events.length ? String(start + PAGE) : "",
       inputModalities: modalities,
       ...(start === 0 ? { commands: await this.commands(this.cwd(session)) } : {}),
-      // Shaped like a tokenUsage event (as Codex reports it), so the app reads snapshot and live usage alike.
-      ...(usage || window ? { nativeState: { tokenUsage: tokenUsageEvent(usage ?? {}, window) } } : {}),
+      // tokenUsage is shaped like a tokenUsage event (as Codex reports it), so the app reads snapshot and live usage alike.
+      ...(Object.keys(nativeState).length ? { nativeState } : {}),
     };
   }
 
@@ -695,6 +734,31 @@ export class PiAdapter {
     } catch {
       return { diff: "", scope: "working-tree", available: false };
     }
+  }
+
+  /**
+   * A copy of the conversation to go on in: Pi's own fork, the whole history in a new session file of the same folder
+   * (its header names the original). This is how the phone continues one pi-gui holds open.
+   */
+  async fork(session, child, _params = {}, authorize = () => {}) {
+    authorize();
+    await this.prepare();
+    const cwd = this.cwd(session);
+    const file = this.handles.get(session.id)?.agent?.sessionFile ?? this.sessionFile(session, cwd);
+    requireThat(file && existsSync(file), "PI_SESSION_NOT_FOUND");
+    let manager;
+    try { manager = this.sdk.SessionManager.forkFrom(file, cwd); } catch { throw new Fault("PI_SESSION_NOT_FOUND"); }
+    if (child.title && !UNNAMED.has(child.title)) manager.appendSessionInfo(String(child.title).slice(0, 200));
+    this.stored.delete(child.id);
+    return {
+      upstream: manager.getSessionId(),
+      piFile: manager.getSessionFile(),
+      cwd,
+      model: session.model,
+      reasoningEffort: session.reasoningEffort,
+      permissionMode: session.permissionMode ?? "read-only",
+      executionProfile: "pi-sdk-v1",
+    };
   }
 
   async quiescent(session) {

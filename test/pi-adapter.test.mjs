@@ -243,11 +243,62 @@ test("a conversation another Pi surface has open can be read but not continued",
     const sdk = fakeSdk({ files: { [file]: [{ type: "message", id: "u", message: { role: "user", content: "hi" } }] } });
     const { adapter, project } = harness(sdk);
     const session = { id: "s", project: "p", upstream: "s.jsonl", piFile: file };
-    assert.equal((await adapter.read(session)).events[0].type, "user/message");
+    const read = await adapter.read(session);
+    assert.equal(read.events[0].type, "user/message");
+    assert.deepEqual(read.nativeState.openIn, { surface: "pi-gui" }, "the phone knows before a send is refused");
     await adapter.resume(session);
-    await assert.rejects(adapter.start(session, "hi"), { code: "PI_SESSION_OPEN_IN_APP" });
+    await assert.rejects(adapter.start(session, "hi", [], { model: "openai-codex/gpt-test" }), { code: "PI_SESSION_OPEN_IN_APP" });
+    assert.equal(sdk.created[0].model, MODEL, "a refused send writes nothing, not even its settings");
     await writeFile(file + ".lease", JSON.stringify({ pid: 2 ** 31 - 2, hostname: hostname() }));
     assert.equal(await foreignLease(file), null, "a lease of a process that is gone does not count");
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("a conversation can be continued in a copy: Pi's fork, the whole history in a new file", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "remotedesk-pi-fork-"));
+  try {
+    const file = join(dir, "s.jsonl");
+    await writeFile(file, "{}\n");
+    const sdk = fakeSdk({ files: { [file]: [] } });
+    const forks = [];
+    sdk.SessionManager.forkFrom = (source, cwd) => {
+      const named = [];
+      forks.push({ source, cwd, named });
+      return { getSessionId: () => "pi-fork-1", getSessionFile: () => join(dir, "fork.jsonl"), appendSessionInfo: (name) => named.push(name) };
+    };
+    const { adapter } = harness(sdk);
+    assert.equal(adapter.capabilities.fork, true);
+    const session = { id: "s", project: "p", upstream: "s", piFile: file, model: "openai-codex/gpt-test", permissionMode: "ask" };
+    const child = { id: "c", project: "p", title: "续写 · 手机继续" };
+    const meta = await adapter.fork(session, child);
+    assert.deepEqual(forks, [{ source: file, cwd: "/work/p", named: ["续写 · 手机继续"] }]);
+    assert.equal(meta.upstream, "pi-fork-1");
+    assert.equal(meta.piFile, join(dir, "fork.jsonl"));
+    assert.equal(meta.permissionMode, "ask", "the copy keeps the original's permissions and model");
+    assert.equal(meta.model, "openai-codex/gpt-test");
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("a conversation written to elsewhere while idle here is opened again before it is read or continued", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "remotedesk-pi-stale-"));
+  try {
+    const file = join(dir, "s.jsonl");
+    await writeFile(file, "a\n");
+    const sdk = fakeSdk({ files: { [file]: [{ type: "message", id: "u", message: { role: "user", content: "hi" } }] } });
+    const { adapter } = harness(sdk);
+    const session = { id: "s", project: "p", upstream: "s", piFile: file };
+    await adapter.resume(session);
+    await adapter.read(session);
+    assert.equal(sdk.created.length, 1, "unchanged: the open conversation is reused");
+    await writeFile(file, "a\nb from pi-gui\n");
+    await adapter.read(session);
+    assert.equal(adapter.handles.has("s"), false, "changed elsewhere: the stale copy is dropped and the file read again");
+    await adapter.start(session, "go on");
+    assert.equal(sdk.created.length, 2, "the turn runs on a fresh copy");
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
