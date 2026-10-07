@@ -32,6 +32,8 @@ function fakeSdk({ script = async () => {}, sessions = [], files = {} } = {}) {
   sdk.DefaultResourceLoader = class {
     constructor(options) { this.options = options; }
     async reload() {}
+    getPrompts() { return { prompts: [{ name: "review", description: "Review the diff", argumentHint: "<files>" }], diagnostics: [] }; }
+    getSkills() { return { skills: [{ name: "deploy", description: "Ship it" }], diagnostics: [] }; }
   };
   sdk.createAgentSession = async (options) => {
     const handlers = {};
@@ -169,6 +171,10 @@ test("a turn streams batched text, the reply, tool steps, usage and its end", as
   assert.equal(session.permissionMode, "read-only", "new sessions start read-only");
   const snapshot = await adapter.read(session);
   assert.equal(snapshot.status, "idle");
+  assert.deepEqual(snapshot.commands, [
+    { name: "/review", description: "Review the diff", kind: "template", hint: "<files>" },
+    { name: "/skill:deploy", description: "Ship it", kind: "skill" },
+  ], "Pi's prompt templates and skills, for the phone's / suggestions");
   assert.equal(snapshot.events.length, events.length);
   assert.equal(snapshot.nativeState.tokenUsage.tokenUsage.last.totalTokens, 1234, 'shaped like the tokenUsage event');
   assert.equal(snapshot.nativeState.tokenUsage.tokenUsage.modelContextWindow, 272000);

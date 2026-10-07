@@ -519,6 +519,30 @@ export class PiAdapter {
     return entry;
   }
 
+  /**
+   * The slash commands Pi expands in a prompt for this folder: its prompt templates (/name) and skills
+   * (/skill:name), from the user's and the project's Pi resources. Read at most once a minute per folder.
+   */
+  async commands(cwd) {
+    await this.prepare();
+    this.commandCache ??= new Map();
+    const cached = this.commandCache.get(cwd);
+    if (cached && Date.now() - cached.at < 60000) return cached.rows;
+    let rows = [];
+    try {
+      const loader = new this.sdk.DefaultResourceLoader({ cwd, agentDir: this.sdk.getAgentDir(), noExtensions: true });
+      await loader.reload();
+      const prompts = loader.getPrompts?.().prompts ?? [];
+      const skills = loader.getSkills?.().skills ?? [];
+      rows = [
+        ...prompts.map((prompt) => ({ name: "/" + prompt.name, description: String(prompt.description ?? "").slice(0, 200), kind: "template", ...(prompt.argumentHint ? { hint: String(prompt.argumentHint).slice(0, 100) } : {}) })),
+        ...skills.map((skill) => ({ name: "/skill:" + skill.name, description: String(skill.description ?? "").slice(0, 200), kind: "skill" })),
+      ].slice(0, 100);
+    } catch { /* commands are optional */ }
+    this.commandCache.set(cwd, { at: Date.now(), rows });
+    return rows;
+  }
+
   async read(session, { cursor } = {}) {
     const start = cursor === undefined || cursor === "" ? 0 : Number(cursor);
     requireThat(Number.isSafeInteger(start) && start >= 0, "CURSOR_INVALID");
@@ -557,6 +581,7 @@ export class PiAdapter {
       events: page,
       nextCursor: start + PAGE < events.length ? String(start + PAGE) : "",
       inputModalities: modalities,
+      ...(start === 0 ? { commands: await this.commands(this.cwd(session)) } : {}),
       // Shaped like a tokenUsage event (as Codex reports it), so the app reads snapshot and live usage alike.
       ...(usage || window ? { nativeState: { tokenUsage: tokenUsageEvent(usage ?? {}, window) } } : {}),
     };
