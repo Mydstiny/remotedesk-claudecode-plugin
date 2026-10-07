@@ -34,7 +34,7 @@ export function serviceDefinition({
   path = process.env.PATH ?? "",
   userSid,
 }) {
-  requireThat(["codex", "dsh", "claudecode"].includes(engine));
+  requireThat(["codex", "dsh", "pi"].includes(engine));
   for (const v of [entry, state, node, user, path])
     requireThat(
       typeof v === "string" && !/[\0\r\n]/.test(v),
@@ -49,9 +49,9 @@ export function serviceDefinition({
       ...(process.env.DSH_HOME ? { DSH_HOME: process.env.DSH_HOME } : {}),
       ...(engine === "codex"
         ? { CODEX_HOME: join(state, "codex-home") }
-        : engine === "claudecode"
-          ? { CLAUDE_CONFIG_DIR: join(state, "claude-home") }
-          : {}),
+        : {}),
+      // Pi shares the user's own Pi directory (sessions, credentials, the pi-gui app's conversations).
+      ...(engine === "pi" && process.env.PI_CODING_AGENT_DIR ? { PI_CODING_AGENT_DIR: process.env.PI_CODING_AGENT_DIR } : {}),
     };
   if (platform === "darwin")
     return {
@@ -209,9 +209,10 @@ async function serviceInternal(action, options) {
           ...(process.env.DSH_HOME ? { DSH_HOME: process.env.DSH_HOME } : {}),
           ...(options.engine === "codex"
             ? { CODEX_HOME: join(options.state, "codex-home") }
-            : options.engine === "claudecode"
-              ? { CLAUDE_CONFIG_DIR: join(options.state, "claude-home") }
-              : {}),
+            : {}),
+          ...(options.engine === "pi" && process.env.PI_CODING_AGENT_DIR
+            ? { PI_CODING_AGENT_DIR: process.env.PI_CODING_AGENT_DIR }
+            : {}),
         },
       };
       await writeFile(record, JSON.stringify(registered), {

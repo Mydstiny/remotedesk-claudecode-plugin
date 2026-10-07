@@ -1,8 +1,8 @@
-// Local control panel page shared by the RemoteDesk host plugins (Codex, DSH, Claude Agent).
+// Local control panel page shared by the RemoteDesk host plugins (Codex, DSH, Pi).
 // The page is served with `default-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'`,
 // so everything (styles, icons, script) stays inline and no external resource is loaded.
 
-const ENGINES = new Set(["codex", "dsh", "claudecode"]);
+const ENGINES = new Set(["codex", "dsh", "pi"]);
 
 const STYLE = `
 :root{color-scheme:light dark;--panel-bg:#f5f4ee;--panel-surface:#fcfbf8;--panel-surface-2:#f0eee6;--panel-border:#e3e0d5;--panel-text:#1f1e1d;--panel-muted:#6b6963;--panel-faint:#9a978e;--panel-input:#fffefb;--panel-input-border:#d9d5c8;--ok:#4b7a36;--ok-bg:#e7eedd;--warn:#9c6413;--warn-bg:#f6ead2;--bad:#b4432e;--bad-bg:#f6e2da;--accent:#c96442;--accent-hover:#b5573a;--accent-soft:#f4e4da;--accent-ink:#ffffff;--shadow:0 1px 2px rgba(31,30,29,.04),0 2px 10px rgba(31,30,29,.04);--radius:16px;--serif:ui-serif,"Iowan Old Style","Palatino Linotype",Georgia,"Songti SC","Noto Serif SC","Source Han Serif SC",serif;font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","HarmonyOS Sans SC","Microsoft YaHei","Segoe UI",sans-serif;line-height:1.55;-webkit-font-smoothing:antialiased}
@@ -82,9 +82,9 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,summary:focus-vi
 .row-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}.row-actions .btn-ghost{padding:7px 11px;font-size:.86rem;font-weight:500}
 details{margin-top:12px}
 summary{cursor:pointer;font-size:.86rem;color:var(--panel-muted);border-radius:8px;width:fit-content}
-textarea,input[type=text],input[type=password]{width:100%;font:inherit;color:var(--panel-text);background:var(--panel-input);border:1px solid var(--panel-input-border);border-radius:11px;padding:10px 12px}
+textarea,input[type=text]{width:100%;font:inherit;color:var(--panel-text);background:var(--panel-input);border:1px solid var(--panel-input-border);border-radius:11px;padding:10px 12px}
 textarea{margin-top:8px;min-height:150px;font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:.76rem}
-input[type=text]:focus,input[type=password]:focus,textarea:focus{border-color:var(--accent)}
+input[type=text]:focus,textarea:focus{border-color:var(--accent)}
 .field{display:grid;gap:5px;margin-top:10px}
 .field label{font-size:.82rem;font-weight:600;color:var(--panel-muted)}
 .list{display:grid;gap:10px}
@@ -169,12 +169,6 @@ const BODY = `
 </article>
 </div>
 <div class='column'>
-<article class='card' id='credential-card' hidden>
-<div class='card-head'><div><h2>Anthropic API Key</h2><p>Claude Agent 只使用 Anthropic API Key。按 Anthropic 的规定，基于 Agent SDK 的第三方产品不能使用 Claude 订阅账号登录。</p></div></div>
-<div class='kv'><div class='kv-row'><span>状态</span><span id='credential-status'></span></div></div>
-<form id='credential-form'><div class='field'><label for='credential-input'>新的 API Key</label><input type='password' id='credential-input' placeholder='sk-ant-…' autocomplete='off' spellcheck='false' required></div><div class='row-actions'><button type='submit' class='btn-primary'><span>保存</span></button><button type='button' id='credential-clear' class='btn-danger' hidden>清除已保存的 Key</button></div></form>
-<p class='faint' style='margin-top:10px;font-size:.8rem'>Key 只保存在本机状态目录（仅本人可读），页面只显示末 4 位；在 console.anthropic.com 创建。</p>
-</article>
 <article class='card'>
 <div class='card-head'><div><h2>服务</h2><p>手机通过局域网连接下面的监听地址。</p></div></div>
 <div id='service' class='kv'><div class='empty'>加载中…</div></div>
@@ -206,7 +200,7 @@ const BODY = `
 `;
 
 const SCRIPT = `
-const ENGINE_NAMES={codex:['Codex','OpenAI Codex'],dsh:['DSH','DeepSeek Harness'],claudecode:['Claude Agent','Claude Agent SDK']};
+const ENGINE_NAMES={codex:['Codex','OpenAI Codex'],dsh:['DSH','DeepSeek Harness'],pi:['Pi','Pi Coding Agent']};
 const ENGINE=document.documentElement.dataset.engine||'';
 const initialToken=new URLSearchParams(location.search).get('token');
 if(initialToken){sessionStorage.setItem('remotedesk.panel.token',initialToken);history.replaceState(null,'','/');}
@@ -230,14 +224,13 @@ function kpi(label,value){return '<div class="kpi"><div class="kpi-label">'+labe
 function renderSummary(data){const paired=data.devices.filter(d=>d.status==='paired').length;const operations=Object.values(data.operations||{}).reduce((a,b)=>a+b,0);$('summary').innerHTML=kpi('项目',data.projects.length)+kpi('已配对设备',paired)+kpi('会话',data.sessions.length)+kpi('操作记录',operations);}
 function renderProjects(data){$('projects').innerHTML=data.projects.map(p=>'<div class="item"><div class="item-icon">'+ICON_FOLDER+'</div><div class="item-body"><div class="item-title">'+esc(p.title)+'</div><div class="item-sub mono">'+esc(p.path)+'</div><div class="chips"><span class="chip">'+esc(p.id)+'</span>'+(p.provider?'<span class="chip accent">'+esc(p.provider)+'</span>':'')+(p.model?'<span class="chip">'+esc(p.model)+'</span>':'')+'</div></div></div>').join('')||'<div class="empty">尚未配置项目，先在下方添加一个本机目录。</div>';
 if(!projectsSeen&&data.projects.length===1)checkedProjects.add(data.projects[0].id);projectsSeen=true;
-$('project-checks').innerHTML=data.projects.map(p=>'<label class="option"><input type="checkbox" name="project" value="'+esc(p.id)+'"'+(checkedProjects.has(p.id)?' checked':'')+'><span><b>'+esc(p.title)+'</b><small class="mono">'+esc(p.id)+'</small></span></label>').join('')||'<div class="empty">先在右侧“项目”里添加项目</div>';
+$('project-checks').innerHTML='<label class="option"><input type="checkbox" name="project" value="*"'+(checkedProjects.has('*')?' checked':'')+'><span><b>全部项目（含电脑 App 里的项目）</b><small>以后在 Pi 里新开的项目也会开放给这台设备</small></span></label>'+data.projects.map(p=>'<label class="option"><input type="checkbox" name="project" value="'+esc(p.id)+'"'+(checkedProjects.has(p.id)?' checked':'')+'><span><b>'+esc(p.title)+'</b><small class="mono">'+esc(p.id)+'</small></span></label>').join('')||'<div class="empty">先在右侧“项目”里添加项目</div>';
 document.querySelectorAll('input[name=project]').forEach(input=>input.addEventListener('change',()=>{if(input.checked)checkedProjects.add(input.value);else checkedProjects.delete(input.value);}));}
 function deviceStatus(d){if(d.status==='paired')return ['ok','已配对'];if(d.status==='revoked')return ['bad','已撤销'];return ['warn','已过期'];}
 function renderDevices(data){const rows=data.devices.slice().sort((a,b)=>(a.revoked===b.revoked?0:a.revoked?1:-1)).map(d=>{const [cls,label]=deviceStatus(d);return '<div class="item"><div class="item-icon">'+ICON_DEVICE+'</div><div class="item-body"><div class="item-title">'+esc(d.name||'未命名设备')+'</div><div class="item-sub mono" title="'+esc(d.id)+'">'+esc(d.id)+'</div><div class="chips"><span class="chip '+cls+'">'+label+'</span><span class="chip">'+(d.role==='operator'?'可操作':'只读')+'</span>'+(d.projects||[]).map(p=>'<span class="chip">'+esc(p)+'</span>').join('')+'</div></div>'+(d.revoked?'':'<button class="btn-danger revoke" type="button" data-device="'+esc(d.id)+'">撤销</button>')+'</div>';}).join('');
 $('devices').innerHTML=rows||'<div class="empty">还没有配对设备。生成邀请后，用手机上的 RemoteDesk 完成配对。</div>';
 document.querySelectorAll('.revoke').forEach(button=>button.addEventListener('click',async()=>{if(!confirm('撤销此设备的远程访问？'))return;button.disabled=true;try{await api('/api/revoke',{method:'POST',body:JSON.stringify({device:button.dataset.device})});notice('设备已撤销');await refresh(false)}catch(error){notice(error.message,true)}finally{button.disabled=false}}));}
-function renderCredential(data){const card=$('credential-card');const credential=data.credential;card.hidden=!credential;if(!credential)return;const label=!credential.configured?'<span class="chip warn">未配置</span>':'<span class="chip ok">'+(credential.source==='environment'?'来自环境变量 ':'已配置 ')+esc(credential.hint)+'</span>';$('credential-status').innerHTML=label;$('credential-clear').hidden=credential.source!=='file';}
-function render(data){currentData=data;renderCredential(data);const engine=data.engine||ENGINE;if(engine&&ENGINE_NAMES[engine])document.documentElement.dataset.engine=engine;const names=ENGINE_NAMES[engine]||[engine,engine];$('engine-chip').textContent=names[0];$('footer').textContent='RemoteDesk 主机桥 · '+names[1]+' · 面板只绑定 127.0.0.1';$('subtitle').textContent='仅限本机访问 · 更新于 '+new Date().toLocaleTimeString();renderService(data);renderSummary(data);renderProjects(data);renderDevices(data);}
+function render(data){currentData=data;const engine=data.engine||ENGINE;if(engine&&ENGINE_NAMES[engine])document.documentElement.dataset.engine=engine;const names=ENGINE_NAMES[engine]||[engine,engine];$('engine-chip').textContent=names[0];$('footer').textContent='RemoteDesk 主机桥 · '+names[1]+' · 面板只绑定 127.0.0.1';$('subtitle').textContent='仅限本机访问 · 更新于 '+new Date().toLocaleTimeString();renderService(data);renderSummary(data);renderProjects(data);renderDevices(data);}
 async function refresh(clear=true){if(!token){notice('控制令牌缺失。请使用插件启动时输出的本机面板 URL 打开。',true);return}try{if(clear)notice('');render(await api('/api/status'))}catch(error){notice(error.message,true)}}
 function showMethod(next){method=next;document.querySelectorAll('.tab').forEach(tab=>tab.setAttribute('aria-selected',String(tab.dataset.method===method)));const link=method==='link';$('pair-qr').parentElement.hidden=link;$('pair-qr-help').hidden=link;$('pair-link').hidden=!link;}
 function tick(){if(!currentInvite)return;const left=Math.max(0,currentInvite.expires-Date.now());const seconds=Math.ceil(left/1000);$('timer-text').textContent=left>0?'剩余 '+seconds+' 秒':'邀请已过期';const bar=$('timer-bar');bar.firstElementChild.style.width=Math.min(100,left/1200)+'%';bar.classList.toggle('low',seconds<=20);$('qr-expired').hidden=left>0;if(left<=0){clearInterval(timer);timer=0;}}
@@ -247,8 +240,6 @@ document.querySelectorAll('.tab').forEach(tab=>tab.addEventListener('click',()=>
 $('copy-link').addEventListener('click',()=>copyText(currentLink,'配对链接已复制'));
 $('copy-payload').addEventListener('click',()=>copyText(JSON.stringify(currentInvite,null,2),'邀请 JSON 已复制'));
 $('regenerate').addEventListener('click',()=>$('invite-form').requestSubmit());
-$('credential-form').addEventListener('submit',async event=>{event.preventDefault();const input=$('credential-input');const button=event.target.querySelector('button[type=submit]');button.disabled=true;try{await api('/api/credential',{method:'POST',body:JSON.stringify({apiKey:input.value})});input.value='';notice('API Key 已保存，新开的会话立即使用');await refresh(false)}catch(error){notice(error.message==='API_KEY_INVALID'?'API Key 格式不正确，应以 sk-ant- 开头':error.message,true)}finally{button.disabled=false}});
-$('credential-clear').addEventListener('click',async()=>{if(!confirm('清除已保存的 API Key？清除后无法开始新的会话。'))return;try{await api('/api/credential/clear',{method:'POST',body:'{}'});notice('已清除 API Key');await refresh(false)}catch(error){notice(error.message,true)}});
 $('project-form').addEventListener('submit',async event=>{event.preventDefault();const button=event.target.querySelector('button');button.disabled=true;try{await api('/api/project',{method:'POST',body:JSON.stringify({id:$('project-id').value,path:$('project-path').value,title:$('project-title').value||undefined})});event.target.reset();$('project-add').open=false;notice('项目已添加；服务重启后会加载新的项目配置');await refresh(false)}catch(error){notice(error.message,true)}finally{button.disabled=false}});
 $('invite-form').addEventListener('submit',async event=>{event.preventDefault();const projects=[...document.querySelectorAll('input[name=project]:checked')].map(input=>input.value);if(!projects.length){notice('至少选择一个项目',true);return}const role=document.querySelector('input[name=role]:checked')?.value||'operator';const button=event.target.querySelector('button[type=submit]');button.disabled=true;try{const result=await api('/api/invite',{method:'POST',body:JSON.stringify({projects,role})});renderInvite(result);notice('邀请已生成，120 秒后过期')}catch(error){notice(error.message,true)}finally{button.disabled=false}});
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)refresh(false);});

@@ -31,7 +31,7 @@ export async function init(
     port = 9443,
   } = {},
 ) {
-  requireThat(["codex", "dsh", "claudecode"].includes(engine));
+  requireThat(["codex", "dsh", "pi"].includes(engine));
   try {
     await access(join(directory, "config.json"));
     throw new Error("ALREADY_INITIALIZED");
@@ -116,7 +116,8 @@ export async function invite(directory, { projects, role = "operator" }) {
   requireThat(
     Array.isArray(projects) &&
       projects.length > 0 &&
-      projects.every((id) => c.projects.some((p) => p.id === id)),
+      // "*": every project, including the computer app's own projects as they are added later.
+      projects.every((id) => id === "*" || c.projects.some((p) => p.id === id)),
   );
   const store = new Store(directory);
   try {

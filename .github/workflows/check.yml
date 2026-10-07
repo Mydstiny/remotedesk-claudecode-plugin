@@ -20,7 +20,9 @@ jobs:
           cache: npm
       - run: npm ci --ignore-scripts
       - run: npm test
-      - run: node --check src/claude-adapter.mjs
+      - run: node --check src/pi-adapter.mjs
+      - run: node --check src/pi-events.mjs
+      - run: node --check src/pi-runtime.mjs
       - run: node --check src/control-panel.mjs
-      - run: node --check bin/remotedesk-claudecode.mjs
+      - run: node --check bin/remotedesk-pi.mjs
       - run: npm pack --dry-run --ignore-scripts

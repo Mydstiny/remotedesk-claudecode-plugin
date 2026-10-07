@@ -1,6 +1,6 @@
 {
-  "name": "@remotedesk/claudecode-plugin",
-  "version": "0.2.0",
+  "name": "@remotedesk/pi-plugin",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "license": "MIT",
@@ -8,7 +8,7 @@
     "node": ">=22.16.0"
   },
   "bin": {
-    "remotedesk-claudecode": "bin/remotedesk-claudecode.mjs"
+    "remotedesk-pi": "bin/remotedesk-pi.mjs"
   },
   "scripts": {
     "test": "node --test test/*.test.mjs"
@@ -17,7 +17,6 @@
     "bin",
     "src",
     "packages",
-    "vendor",
     "docs",
     "compatibility.json",
     "README.md",
@@ -28,8 +27,5 @@
     "AGENTS.md",
     "test",
     "package-lock.json"
-  ],
-  "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "0.3.286"
-  }
+  ]
 }

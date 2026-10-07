@@ -1,48 +1,45 @@
-import { readFile } from "node:fs/promises";
-import { homedir } from "node:os";
-import { join } from "node:path";
-import { inspectClaude } from "./claude-cli.mjs";
-import { apiKeyStatus } from "./api-key.mjs";
+import { loadPi } from "./pi-runtime.mjs";
 
-const SDK_VERSION = "0.3.286";
+export const ADAPTER_VERSION = "0.3.0";
 
-export async function doctor({ probe = false } = {}) {
+/** Checks Node, the user's Pi install and whether Pi has a signed-in provider; never runs a model turn. */
+export async function doctor({ probe = false, env = process.env, load = loadPi } = {}) {
   const report = {
     schemaVersion: 1,
     status: "blocked",
     changed: false,
-    componentVersions: { adapter: "0.2.0", node: process.versions.node, claude: null, agentSdk: null },
+    componentVersions: { adapter: ADAPTER_VERSION, node: process.versions.node, pi: null },
     checks: [],
     actions: [],
     requiresUserAction: [],
-    warnings: ["ANTHROPIC_API_KEY_AUTH_ONLY", "REAL_TURN_AND_DEVICE_ACCEPTANCE_REQUIRED"],
-    capabilities: { remoteAccess: true, remoteProtocol: 1, proEntitlement: "pro.lifetime", appExposure: false },
+    warnings: [],
+    capabilities: { remoteAccess: true, remoteProtocol: 1, proEntitlement: "pro.lifetime", appExposure: true },
   };
-  const check = (id, status, code) => report.checks.push({ id, status, code });
+  const check = (id, status, code, detail) => report.checks.push({ id, status, code, ...(detail ? { detail } : {}) });
   try {
-    if (Number(process.versions.node.split(".")[0]) < 22) throw new Error("NODE_VERSION_UNSUPPORTED");
-    const result = await inspectClaude(process.env.REMOTEDESK_CLAUDE_EXECUTABLE ?? "claude");
-    report.componentVersions.claude = result.version || null;
-    if (!result.supported) throw new Error(result.error || "CLAUDE_VERSION_UNVERIFIED");
-    check("cli", "pass", "PINNED_VERSION_AND_STREAM_FLAGS");
-    const sdkPackage = JSON.parse(await readFile(new URL("../node_modules/@anthropic-ai/claude-agent-sdk/package.json", import.meta.url), "utf8"));
-    report.componentVersions.agentSdk = sdkPackage.version;
-    if (sdkPackage.version !== SDK_VERSION) throw new Error("CLAUDE_SDK_VERSION_UNVERIFIED");
-    check("agentSdk", "pass", "PINNED_AGENT_SDK");
-    const credential = await apiKeyStatus(join(homedir(), ".remotedesk", "claudecode"));
-    if (credential.configured) check("apiKey", "pass", "ANTHROPIC_API_KEY_CONFIGURED");
+    if (Number(process.versions.node.split(".")[0]) < 22) throw Object.assign(new Error("NODE_VERSION_UNSUPPORTED"), { code: "NODE_VERSION_UNSUPPORTED" });
+    check("node", "pass", "NODE_22_OR_NEWER");
+    const pi = await load(env);
+    report.componentVersions.pi = pi.version;
+    check("pi", "pass", "PI_SDK_FOUND", pi.directory);
+    const runtime = await pi.sdk.ModelRuntime.create();
+    const available = await runtime.getAvailable();
+    const providers = [...new Set(available.map((model) => model.provider))];
+    if (available.length) check("models", "pass", "PI_MODELS_AVAILABLE", providers.join(", ") + " · " + available.length + " models");
     else {
-      check("apiKey", "warn", "ANTHROPIC_API_KEY_MISSING");
-      report.requiresUserAction.push("CONFIGURE_ANTHROPIC_API_KEY");
+      check("models", "warn", "PI_LOGIN_REQUIRED");
+      report.requiresUserAction.push("PI_LOGIN_REQUIRED");
     }
     if (probe) {
-      check("streamContract", "pass", "SDK_QUERY_AND_CONTROL_SURFACES_PRESENT");
-      report.warnings.push("NO_MODEL_TURN_OR_ACCOUNT_ACCESS_PERFORMED", "APP_EXPOSURE_REMAINS_GATED");
+      const sessions = await pi.sdk.SessionManager.listAll();
+      check("sessions", "pass", "PI_SESSIONS_READABLE", sessions.length + " sessions in " + pi.sdk.getAgentDir());
+      report.warnings.push("NO_MODEL_TURN_PERFORMED");
     }
     report.status = "ok";
   } catch (error) {
-    check("probe", "fail", error?.message || "CLAUDE_PROBE_FAILED");
-    report.requiresUserAction.push("INSTALL_PINNED_CLAUDE_AND_AGENT_SDK");
+    const code = error?.code || error?.message || "PI_PROBE_FAILED";
+    check("probe", "fail", code);
+    report.requiresUserAction.push(code === "PI_NOT_INSTALLED" ? "INSTALL_PI" : code === "PI_VERSION_UNSUPPORTED" ? "UPDATE_PI" : "CHECK_PI");
   }
   return report;
 }

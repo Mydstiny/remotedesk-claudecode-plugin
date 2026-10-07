@@ -1,15 +1,18 @@
 {
   "schemaVersion": 1,
-  "adapterVersion": "0.2.0",
-  "stage": "sdk-bridge-preview",
-  "claudeCodeVersions": ["2.1.286"],
+  "adapterVersion": "0.3.0",
+  "stage": "sdk-bridge",
+  "engine": "pi",
+  "piPackage": "@earendil-works/pi-coding-agent",
+  "piVersions": ">=1.0.0",
+  "testedPiVersion": "1.0.4",
   "testedNode": "26.4.0",
   "testedPlatform": "darwin-arm64",
   "remoteAccess": true,
   "protocolMajor": 1,
   "wireProtocolFrozen": false,
-  "parityStatus": "REAL_ACCOUNT_AND_DEVICE_ACCEPTANCE_REQUIRED",
-  "agentSdkVersion": "0.3.286",
+  "permissionModes": ["read-only", "ask", "full-access"],
+  "parityStatus": "HOST_TURNS_ACCEPTED_DEVICE_ACCEPTANCE_PENDING",
   "entitlement": "pro.lifetime",
   "platforms": ["darwin", "linux", "win32"]
 }

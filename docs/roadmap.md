@@ -1,6 +1,5 @@
 # Roadmap
 
-1. Pin and fixture the Claude Agent SDK query/control contract without model calls in tests.
-2. Run the host-only adapter against a real Claude account with read-only, approval, question, cancellation and restart scenarios.
-3. Complete independent mTLS, project authorization, QR/link pairing and unknown-operation review.
-4. Add the HarmonyOS backend only after the host bridge and client protocol are independently accepted.
+1. Device acceptance with the HarmonyOS client: pairing, the three permission modes, approvals, steer and cancel, compact, and history of pi-gui conversations.
+2. Fork (`SessionManager.forkFrom`) and question forwarding, if Pi gains a question tool.
+3. An optional, reviewed allowlist of Pi extensions for remote sessions.
