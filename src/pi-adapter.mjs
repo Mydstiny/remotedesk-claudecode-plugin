@@ -557,7 +557,8 @@ export class PiAdapter {
       events: page,
       nextCursor: start + PAGE < events.length ? String(start + PAGE) : "",
       inputModalities: modalities,
-      ...(usage || window ? { nativeState: { tokenUsage: tokenUsageEvent(usage ?? {}, window).tokenUsage } } : {}),
+      // Shaped like a tokenUsage event (as Codex reports it), so the app reads snapshot and live usage alike.
+      ...(usage || window ? { nativeState: { tokenUsage: tokenUsageEvent(usage ?? {}, window) } } : {}),
     };
   }
 

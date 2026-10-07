@@ -62,7 +62,7 @@ Pi 插件实现 RemoteDesk 主机桥协议 1（与 Codex、DSH 插件相同的 `
 { "upstream": "…", "model": "openai-codex/gpt-6-luna", "reasoningEffort": "medium", "permissionMode": "read-only",
   "status": "idle | running", "events": [ … ], "nextCursor": "200",
   "inputModalities": ["text", "image"],
-  "nativeState": { "tokenUsage": { "last": { "totalTokens": 2551 }, "modelContextWindow": 272000 } } }
+  "nativeState": { "tokenUsage": { "tokenUsage": { "last": { "totalTokens": 2551 }, "modelContextWindow": 272000 } } } }
 ```
 
 `events` 每页 200 条，按 `nextCursor` 翻页，直到返回空字符串。会话没有在主机上打开时，事件从 Pi 的对话文件（当前分支）生成；打开后，是文件历史加上实时事件。

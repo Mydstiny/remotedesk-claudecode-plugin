@@ -170,7 +170,8 @@ test("a turn streams batched text, the reply, tool steps, usage and its end", as
   const snapshot = await adapter.read(session);
   assert.equal(snapshot.status, "idle");
   assert.equal(snapshot.events.length, events.length);
-  assert.equal(snapshot.nativeState.tokenUsage.last.totalTokens, 1234);
+  assert.equal(snapshot.nativeState.tokenUsage.tokenUsage.last.totalTokens, 1234, 'shaped like the tokenUsage event');
+  assert.equal(snapshot.nativeState.tokenUsage.tokenUsage.modelContextWindow, 272000);
 });
 
 test("a prompt that fails ends the turn as failed with the reason", async () => {
