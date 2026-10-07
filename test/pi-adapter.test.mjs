@@ -44,6 +44,7 @@ function fakeSdk({ script = async () => {}, sessions = [], files = {} } = {}) {
       sessionFile: options.sessionManager.file,
       model: options.model ?? MODEL,
       thinkingLevel: options.thinkingLevel ?? "medium",
+      registered: options.tools,
       tools: options.tools,
       modelRuntime: options.modelRuntime,
       subscribe: (fn) => { listeners.add(fn); return () => listeners.delete(fn); },
@@ -53,7 +54,8 @@ function fakeSdk({ script = async () => {}, sessions = [], files = {} } = {}) {
       abort: async () => {},
       setModel: async (model) => { agent.model = model; },
       setThinkingLevel: (level) => { agent.thinkingLevel = level; },
-      setActiveToolsByName: (names) => { agent.tools = names; },
+      // Like Pi: only tools registered when the session was created can become active.
+      setActiveToolsByName: (names) => { agent.tools = names.filter((name) => agent.registered.includes(name)); },
       setSessionName: (name) => { agent.name = name; },
       getContextUsage: () => ({ tokens: 1234 }),
       compact: async () => {},
@@ -115,6 +117,20 @@ test("ask routes commands and file changes to the phone; reads run directly", as
   assert.equal(grep.result, undefined);
   assert.equal(grep.asks.length, 0);
   assert.ok(grep.agent.tools.includes("bash"));
+});
+
+test("a session started read-only can be widened later: every tool is registered, the mode picks the active ones", async () => {
+  const sdk = fakeSdk();
+  const { adapter, project } = harness(sdk);
+  const session = { id: "s", project: "p", title: "t", permissionMode: "read-only" };
+  await adapter.create(session, project);
+  const agent = sdk.created[0];
+  assert.deepEqual(agent.registered, ["read", "grep", "find", "ls", "bash", "edit", "write"]);
+  assert.deepEqual(agent.tools, [...READ_TOOLS]);
+  await adapter.update(session, { permissionMode: "ask" });
+  assert.deepEqual(agent.tools, ["read", "grep", "find", "ls", "bash", "edit", "write"]);
+  await adapter.update(session, { permissionMode: "read-only" });
+  assert.deepEqual(agent.tools, [...READ_TOOLS]);
 });
 
 test("full access runs everything without asking", async () => {

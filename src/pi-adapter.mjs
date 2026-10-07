@@ -243,10 +243,12 @@ export class PiAdapter {
       modelRuntime: runtime,
       ...(model ? { model } : {}),
       ...(session.reasoningEffort ? { thinkingLevel: session.reasoningEffort } : !session.upstream && !session.model ? await this.preferred(cwd).then((p) => (p.effort ? { thinkingLevel: p.effort } : {})) : {}),
-      tools: this.toolsFor(session),
+      // Every tool is registered (Pi cannot activate one left out here later); the mode picks the active ones.
+      tools: [...ALL_TOOLS],
       resourceLoader: loader,
       sessionManager: manager,
     });
+    agent.setActiveToolsByName(this.toolsFor(session));
     handle.agent = agent;
     handle.unsubscribe = agent.subscribe((event) => this.onEvent(handle, event));
     if (!session.upstream && session.title && !UNNAMED.has(session.title)) agent.setSessionName(session.title.slice(0, 200));
