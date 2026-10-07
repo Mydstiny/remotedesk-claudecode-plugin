@@ -29,7 +29,7 @@ const MAX_HISTORY_EVENTS = 6000;
 const PAGE = 200;
 const CHUNK_FLUSH_MS = 120;
 const CHUNK_FLUSH_CHARS = 1500;
-const UNNAMED = new Set(["", "New thread", "RemoteDesk session"]);
+const UNNAMED = new Set(["", "New thread", "RemoteDesk session", "新会话", "新对话"]);
 const REMOTE_PROMPT = [
   "This Pi session is driven from the RemoteDesk app on the user's phone or tablet; the user reads your replies there.",
   "Keep work inside the project folder unless the user asks otherwise.",
@@ -353,6 +353,15 @@ export class PiAdapter {
     if (message.role === "user") {
       const content = userBlocks(message.content);
       if (content.length) this.emit(handle, "user/message", { message: { role: "user", content } });
+      // A conversation started without a name takes its first prompt's first line, here and in Pi (pi-gui shows it).
+      const first = content.find((block) => block.type === "text")?.text;
+      if (first && UNNAMED.has(handle.session.title ?? "")) {
+        const title = firstLine(first, 40);
+        if (title) {
+          this.checkpoint(handle.session, { title });
+          try { handle.agent?.setSessionName(title); } catch { /* the bridge title still changed */ }
+        }
+      }
     } else if (message.role === "assistant") {
       for (const block of message.content ?? []) {
         if (block?.type === "thinking" && block.thinking && !block.redacted) this.emit(handle, "assistant/message", { message: block.thinking, kind: "thinking" });

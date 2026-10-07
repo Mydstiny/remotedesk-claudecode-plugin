@@ -136,8 +136,9 @@ test("a turn streams batched text, the reply, tool steps, usage and its end", as
     },
   });
   const { adapter, events, project } = harness(sdk);
-  const session = { id: "s", project: "p", title: "t" };
+  const session = { id: "s", project: "p", title: "新会话" };
   await adapter.create(session, project);
+  assert.equal(sdk.created[0].name, undefined, "a placeholder title is not written to Pi");
   const { turnId } = await adapter.start(session, "hi");
   await adapter.handles.get("s").run?.done;
   assert.deepEqual(events.map((e) => e.type), ["turn/start", "user/message", "assistant/chunk", "assistant/message", "tool/call", "tokenUsage", "user/message", "turn/end", "execution.idle"]);
@@ -147,6 +148,8 @@ test("a turn streams batched text, the reply, tool steps, usage and its end", as
   assert.equal(events[5].data.tokenUsage.modelContextWindow, 272000);
   assert.deepEqual(events[7].data, { status: "completed", result: "" });
   assert.equal(session.upstream, "pi-session-1");
+  assert.equal(session.title, "hi", "an untitled conversation is named after its first prompt");
+  assert.equal(sdk.created[0].name, "hi");
   assert.equal(session.permissionMode, "read-only", "new sessions start read-only");
   const snapshot = await adapter.read(session);
   assert.equal(snapshot.status, "idle");
