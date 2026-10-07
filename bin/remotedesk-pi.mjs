@@ -24,8 +24,11 @@ await main({
         process.exitCode = 2;
       }
     })());
-    process.once("SIGINT", stop);
-    process.once("SIGTERM", stop);
+    // Kept for the whole run (not once): Pi's dependencies use signal-exit, which re-raises SIGTERM when it finds no
+    // other listener, and that would kill the process before the bridge released its locks. Stop is idempotent.
+    const stopAndExit = () => { void stop().then(() => process.exit()); };
+    process.on("SIGINT", stopAndExit);
+    process.on("SIGTERM", stopAndExit);
     try {
       await bridge.start();
       console.log(JSON.stringify({ ready: true, engine: "pi", protocol: 1 }));
